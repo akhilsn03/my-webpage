@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two Pass Assembler</title>
+    <style>
+        body {
+            font-family: Arial, 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+            background-color: #bacae3;
+            color: white;
+        }
+        .container {
+            width: 80%;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #3f9194;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(16, 112, 215, 0.1);
+        }
+        label, button {
+            display: block;
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px;
+            background-color: rgb(29, 30, 31);
+            color: #f1e9e4;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #b0a45e;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+        }
+        #output {
+            background-color: rgb(232, 232, 180);
+            color: black;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Two Pass Assembler</h2>
+
+    <!-- Upload Input File -->
+    <label for="inputFile">Input File:</label>
+    <input type="file" id="inputFile" accept=".txt">
+
+    <!-- Upload OPTAB File -->
+    <label for="optabFile">OPTAB File:</label>
+    <input type="file" id="optabFile" accept=".txt">
+
+    <!-- Buttons for Pass 1 and Pass 2 -->
+    <button id="pass1Button">Run Pass 1</button>
+    <button id="pass2Button" disabled>Run Pass 2</button>
+
+    <!-- Output Textareas -->
+    <label for="output">Output (Pass 1):</label>
+    <textarea id="output" readonly></textarea>
+
+    <label for="objectCode">Object Code (Pass 2):</label>
+    <textarea id="objectCode" readonly></textarea>
+
+</div>
+
+<script>
+    let inputFileContent = '';
+    let optabFileContent = '';
+    let symtab = {};
+    let intermediateFile = [];
+    let machineCode = [];
+    let locctr = 0;
+    let start = 0;
+
+    // Load Input File
+    document.getElementById('inputFile').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                inputFileContent = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+    });
+
+    // Load OPTAB File
+    document.getElementById('optabFile').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                optabFileContent = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+    });
+
+    // Parse OPTAB into an object
+    function parseOptab(content) {
+        const optab = {};
+        const lines = content.trim().split('\n');
+        for (const line of lines) {
+            const [mnemonic, opcode] = line.trim().split(/\s+/);
+            optab[mnemonic] = opcode;
+        }
+        return optab;
+    }
+
+    // Run Pass 1
+    document.getElementById('pass1Button').addEventListener('click', function() {
+        const optab = parseOptab(optabFileContent);
+        const lines = inputFileContent.trim().split('\n');
+        let output = '';
+
+        for (const line of lines) {
+            const [label, mnemonic, operand] = line.trim().split(/\s+/);
+
+            if (mnemonic === 'START') {
+                start = parseInt(operand);
+                locctr = start;
+                output += `\t${label}\t${mnemonic}\t${operand}\n`;
+            } else if (mnemonic === 'END') {
+                output += `${locctr}\t${label}\t${mnemonic}\t${operand}\n`;
+                break;
+            } else {
+                output += `${locctr}\t${label}\t${mnemonic}\t${operand}\n`;
+
+                if (label) {
+                    symtab[label] = locctr.toString(16).toUpperCase().padStart(4, '0');
+                }
+
+                if (optab[mnemonic]) {
+                    locctr += 3;
+                } else if (mnemonic === 'WORD') {
+                    locctr += 3;
+                } else if (mnemonic === 'RESW') {
+                    locctr += parseInt(operand) * 3;
+                } else if (mnemonic === 'BYTE') {
+                    locctr += 1;
+                } else if (mnemonic === 'RESB') {
+                    locctr += parseInt(operand);
+                }
+            }
+        }
+
+        document.getElementById('output').value = output;
+        document.getElementById('pass2Button').disabled = false;
+    });
+
+    // Run Pass 2
+    document.getElementById('pass2Button').addEventListener('click', function() {
+        const optab = parseOptab(optabFileContent);
+        const lines = inputFileContent.trim().split('\n');
+        let objectCode = '';
+
+        for (const line of lines) {
+            const [label, mnemonic, operand] = line.trim().split(/\s+/);
+
+            if (optab[mnemonic]) {
+                const opcode = optab[mnemonic];
+                const address = symtab[operand] || '0000';
+                objectCode += `${opcode}${address}\n`;
+            } else if (mnemonic === 'BYTE') {
+                const byteVal = operand.slice(2, -1);
+                objectCode += `${byteVal.toUpperCase()}\n`;
+            } else if (mnemonic === 'WORD') {
+                const wordVal = parseInt(operand).toString(16).toUpperCase().padStart(6, '0');
+                objectCode += `${wordVal}\n`;
+            }
+        }
+
+        document.getElementById('objectCode').value = objectCode;
+    });
+</script>
+
+</body>
+</html>
